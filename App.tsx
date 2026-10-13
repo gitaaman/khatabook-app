@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { KhataProvider, useKhata } from './KhataContext';
 import { ToastProvider } from './ToastContext';
 import { Navbar } from './Navbar';
@@ -9,6 +9,67 @@ import { CustomerDetail } from './CustomerDetail';
 import { BillCreate } from './BillCreate';
 import { Settings } from './Settings';
 import { FiSmartphone, FiMonitor } from 'react-icons/fi';
+
+// Android Native Hardware / Gesture Back Button Handler
+const AndroidBackButtonHandler: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    let listenerHandle: any = null;
+
+    const registerBackListener = async () => {
+      try {
+        const capacitor = (window as any).Capacitor;
+        const CapApp = capacitor?.Plugins?.App;
+
+        if (CapApp && typeof CapApp.addListener === 'function') {
+          listenerHandle = await CapApp.addListener('backButton', () => {
+            const currentPath = window.location.pathname;
+            // If on root home dashboard or onboarding, allow app exit
+            if (currentPath === '/' || currentPath === '/onboarding') {
+              if (typeof CapApp.exitApp === 'function') {
+                CapApp.exitApp();
+              }
+            } else {
+              // Otherwise, navigate back within the app history
+              navigate(-1);
+            }
+          });
+        }
+      } catch (e) {
+        console.warn('Capacitor App backButton listener warning:', e);
+      }
+    };
+
+    registerBackListener();
+
+    // Document backbutton event fallback for WebView / Android
+    const handleDocumentBack = (e: Event) => {
+      e.preventDefault();
+      const currentPath = window.location.pathname;
+      const CapApp = (window as any).Capacitor?.Plugins?.App;
+      if (currentPath === '/' || currentPath === '/onboarding') {
+        if (CapApp?.exitApp) {
+          CapApp.exitApp();
+        }
+      } else {
+        navigate(-1);
+      }
+    };
+
+    document.addEventListener('backbutton', handleDocumentBack);
+
+    return () => {
+      if (listenerHandle?.remove) {
+        listenerHandle.remove();
+      }
+      document.removeEventListener('backbutton', handleDocumentBack);
+    };
+  }, [navigate, location]);
+
+  return null;
+};
 
 const AppRoutes: React.FC = () => {
   const { isOnboarded, loading } = useKhata();
@@ -57,6 +118,7 @@ export const App: React.FC = () => {
     <ToastProvider>
       <KhataProvider>
         <BrowserRouter>
+          <AndroidBackButtonHandler />
           {/* Top Control Bar for Laptop / Desktop Users to toggle Phone Preview */}
           <div className="hidden md:flex items-center justify-between px-6 py-2.5 bg-slate-900 text-white text-xs font-semibold z-50 sticky top-0 shadow-md">
             <div className="flex items-center gap-2">
